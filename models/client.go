@@ -18,17 +18,16 @@ type Client struct {
 	Outbound   chan<- Command //This channel receive the commands
 	Register   chan<- *Client //This channel receive the client that want to join a channel
 	Deregister chan<- *Client //This channel receive the client that want to leave a channel
-	Macadddr   []string       //Mac address for identify the client
+	macaddr    []string       //Mac address for identify the client
 	username   string         // The name of the client
 }
 
-func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Client, mac []string) *Client {
+func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Client) *Client {
 	return &Client{
 		Conn:       conn,
 		Outbound:   o,
 		Register:   r,
 		Deregister: d,
-		Macadddr:   mac,
 	}
 }
 

@@ -29,7 +29,6 @@ func main() {
 		}
 
 		//Obtaining the mac address of the client for identify it
-		macadd, err := getMacAddr()
 
 		if err != nil {
 			log.Printf("%v", err)
@@ -41,25 +40,9 @@ func main() {
 			hub.Commands,        //Channel of the hub for gettin the client's commands
 			hub.Registrations,   //Channel of the hub fot getting the registrations
 			hub.Deregistrations, //Channel of the hub fot getting the registrations
-			macadd,              //setting the mac addres
 		)
 		//Client starts reading
 		go c.Read()
 	}
 
-}
-
-func getMacAddr() ([]string, error) {
-	ifas, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	var as []string
-	for _, ifa := range ifas {
-		a := ifa.HardwareAddr.String()
-		if a != "" {
-			as = append(as, a)
-		}
-	}
-	return as, nil
 }
