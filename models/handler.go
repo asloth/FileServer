@@ -114,7 +114,7 @@ func (h *Hub) listChannels(u string) {
 		}
 
 		for c := range h.Channels {
-			names = append(names, "#"+c+" ")
+			names = append(names, "-"+c+" ")
 		}
 
 		resp := strings.Join(names, ", ")
