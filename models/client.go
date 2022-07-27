@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"strconv"
 
 	"io"
 	"net"
@@ -158,25 +157,23 @@ func (c *Client) sendFile(args []byte) error {
 
 	args = bytes.TrimSpace(bytes.TrimPrefix(args, recipient))
 
-	l := bytes.Split(args, DELIMITER)[0]
+	// l := bytes.Split(args, DELIMITER)[0]
+	// fmt.Print(string(args))
+	// length, err := strconv.Atoi(string(l))
+	// if err != nil {
+	// 	return fmt.Errorf("body length must be present")
+	// }
+	// if length == 0 {
+	// 	return fmt.Errorf("body length must be at least 1")
+	// }
 
-	length, err := strconv.Atoi(string(l))
-
-	if err != nil {
-		return fmt.Errorf("body length must be present")
-
-	}
-	if length == 0 {
-		return fmt.Errorf("body length must be at least 1")
-	}
-
-	padding := len(l) + len(DELIMITER) // Size of the body length + the delimiter
-	body := args[padding : padding+length]
+	//padding := len(l) + len(DELIMITER) // Size of the body length + the delimiter
+	//	body := args[padding : padding+length]
 
 	c.Outbound <- Command{
 		channel: string(recipient),
 		sender:  c.username,
-		body:    body,
+		body:    args,
 		id:      SEND,
 	}
 
