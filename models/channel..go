@@ -11,6 +11,24 @@ func (c *Channel) broadcast(s string, m []byte) {
 	msg = append(msg, '\n')
 
 	for cl := range c.clients {
-		cl.Conn.Write(msg)
+
+		if cl.username != s {
+			cl.Conn.Write(msg)
+		}
 	}
+
+	/* buf := make([]byte, 1024)
+	// for {
+	//     n, err := c.Conn.Read(buf)
+	//     if err != nil {
+	//         if err != io.EOF {
+	//             log.Println(err)
+	//         }
+
+	//         return
+	//     }
+	//     log.Printf("received: %q", buf[:n])
+	//     log.Printf("bytes: %d", n)
+
+	 }*/
 }
