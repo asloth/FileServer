@@ -65,34 +65,34 @@ func (h *Hub) deregister(c *Client) {
 	}
 }
 
-func (h *Hub) joinChannel(u string, c string) {
-	if client, ok := h.Clients[u]; ok {
-		if channel, ok := h.Channels[c]; ok {
+func (h *Hub) joinChannel(userName string, channelName string) {
+	if client, ok := h.Clients[userName]; ok {
+		if channel, ok := h.Channels[channelName]; ok {
 			// Channel exists, join
 			channel.clients[client] = true
 		} else {
 			// Channel doesn't exists, create and join
-			ch := newChannel(c)
+			ch := newChannel(channelName)
 			ch.clients[client] = true
-			h.Channels[c] = ch
+			h.Channels[channelName] = ch
 		}
 		client.Conn.Write([]byte("OK\n"))
 	}
 }
 
-func (h *Hub) leaveChannel(u string, c string) {
-	if client, ok := h.Clients[u]; ok {
-		if channel, ok := h.Channels[c]; ok {
+func (h *Hub) leaveChannel(userName string, channelName string) {
+	if client, ok := h.Clients[userName]; ok {
+		if channel, ok := h.Channels[channelName]; ok {
 			delete(channel.clients, client)
 		}
 	}
 }
 
-func (h *Hub) sendFile(u string, r string, body []byte) {
-	if sender, ok := h.Clients[u]; ok {
-		switch r[0] {
+func (h *Hub) sendFile(user string, channel string, body []byte) {
+	if sender, ok := h.Clients[user]; ok {
+		switch channel[0] {
 		case '#':
-			if channel, ok := h.Channels[r]; ok {
+			if channel, ok := h.Channels[channel]; ok {
 				if _, ok := channel.clients[sender]; ok {
 					channel.broadcast(sender.username, body)
 				}
