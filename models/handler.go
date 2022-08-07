@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 //The hub is going to coordinate channels and petitions from the clients
 type Hub struct {
@@ -9,6 +12,7 @@ type Hub struct {
 	Commands        chan Command        // The list of commands
 	Deregistrations chan *Client        // The channel for deregistrations from channels
 	Registrations   chan *Client        // The channel for registrations in the channels
+	data            chan []byte         //data from the connection
 }
 
 func NewHub() *Hub {
@@ -35,7 +39,7 @@ func (h *Hub) Run() {
 			case UNSUSCRIBE:
 				h.leaveChannel(cmd.sender, cmd.channel)
 			case SEND:
-				h.sendFile(cmd.sender, cmd.channel, cmd.body)
+				h.sendFile(cmd.sender, cmd.channel)
 			case LCHANNELS:
 				h.listChannels(cmd.sender)
 			default:
@@ -88,20 +92,37 @@ func (h *Hub) leaveChannel(userName string, channelName string) {
 	}
 }
 
-func (h *Hub) sendFile(user string, channel string, body []byte) {
+func (h *Hub) sendFile(user string, channel string) {
 	if sender, ok := h.Clients[user]; ok {
-		switch channel[0] {
-		case '#':
+		if channel[0] == '#' {
+			fmt.Println("flag1")
 			if channel, ok := h.Channels[channel]; ok {
+				fmt.Println("flag2")
 				if _, ok := channel.clients[sender]; ok {
-					channel.broadcast(sender.username, body)
+					fmt.Println("flag3")
+					channel.setReceivingMode(sender.username)
+
+					fmt.Println("flag4")
+					sender.isTransfering = true
+
+					fmt.Println("flag6")
+					sender.Conn.Write([]byte("SENDING\n"))
+
+					// channel.broadcastFile(sender.username, sender.Conn)
+
+					fmt.Println("flag7")
+
+				} else {
+					sender.Conn.Write([]byte("ERR client doesn't allowed\n"))
+
 				}
 			} else {
-				sender.Conn.Write([]byte("ERR no such channel"))
+				sender.Conn.Write([]byte("ERR no such channel\n"))
 			}
-		default:
-			sender.Conn.Write([]byte("ERR MSG command"))
+		} else {
+			sender.Conn.Write([]byte("ERR MSG command\n"))
 		}
+
 	}
 }
 

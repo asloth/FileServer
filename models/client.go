@@ -1,7 +1,6 @@
 package models
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 
@@ -14,83 +13,94 @@ var (
 )
 
 type Client struct {
-	Conn       net.Conn       //The TCP connect
-	Outbound   chan<- Command //This channel receive the commands
-	Register   chan<- *Client //This channel receive the client that want to join a channel
-	Deregister chan<- *Client //This channel receive the client that want to leave a channel
-	macaddr    []string       //Mac address for identify the client
-	username   string         // The name of the client
+	Conn          net.Conn       //The TCP connect
+	Outbound      chan<- Command //This channel receive the commands
+	Register      chan<- *Client //This channel receive the client that want to join a channel
+	Deregister    chan<- *Client //This channel receive the client that want to leave a channel
+	macaddr       []string       //Mac address for identify the client
+	username      string         // The name of the client
+	isTransfering bool
+	isReceiving   bool
 }
 
 func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Client) *Client {
 	return &Client{
-		Conn:       conn,
-		Outbound:   o,
-		Register:   r,
-		Deregister: d,
+		Conn:          conn,
+		Outbound:      o,
+		Register:      r,
+		Deregister:    d,
+		isTransfering: false,
 	}
 }
 
 func (c *Client) Read() error {
+	// reader := bufio.NewReader(c.Conn)
 	for {
-		msg, err := bufio.NewReader(c.Conn).ReadBytes('\n')
+		msg := make([]byte, 3)
+		_, err := c.Conn.Read(msg)
+		fmt.Println(msg)
 		if err == io.EOF {
 			// Connection closed, deregister client
 			c.Deregister <- c
 			return nil
 		}
-
 		if err != nil {
 			return err
 		}
 
 		c.Handle(msg)
 	}
+
 }
 
 func (c *Client) Handle(message []byte) {
 	//Taking the command from the received message
-	cmd := bytes.ToUpper(bytes.TrimSpace(bytes.Split(message, []byte(" "))[0]))
+	cmd := bytes.ToUpper(bytes.TrimSpace(message))
 
 	//Take the arguments of the command
-	args := bytes.TrimSpace(bytes.TrimPrefix(message, cmd))
+	// args := bytes.TrimSpace(bytes.TrimPrefix(message, cmd))
 
 	//Identifying the command
 	switch string(cmd) {
-	case "REGISTER":
-		if err := c.registerClient(args); err != nil {
+	case "REG":
+		if err := c.registerClient(); err != nil {
 			c.err(err)
 		}
-	case "SUSCRIBE":
-		if err := c.suscribeToChannel(args); err != nil {
-			c.err(err)
-		}
-	case "UNSUSCRIBE":
-		if err := c.unsuscribeFromChannel(args); err != nil {
-			c.err(err)
-		}
-	case "SEND":
-		if err := c.sendFile(args); err != nil {
-			c.err(err)
-		}
-	case "LCHANNELS":
+	case "SUS":
+		// if err := c.suscribeToChannel(); err != nil {
+		// 	c.err(err)
+		// }
+	case "UNS":
+		// if err := c.unsuscribeFromChannel(); err != nil {
+		// 	c.err(err)
+		// }
+	case "SND":
+		// if err := c.sendFile(); err != nil {
+		// 	c.err(err)
+		// }
+	case "LCH":
 		c.listChannels()
 	default:
 		c.err(fmt.Errorf("Unknown command %s", cmd))
 	}
 }
 
-func (c *Client) registerClient(args []byte) error {
+func (c *Client) registerClient() error {
+	args := make([]byte, 7)
+	_, err := c.Conn.Read(args)
+	if err != nil {
+		return fmt.Errorf("Error en recibir datos")
+	}
+
 	u := bytes.TrimSpace(args)
 	if u[0] != '@' {
-		fmt.Print(args)
-		fmt.Print(u[0])
 		return fmt.Errorf("Username must begin with @")
 	}
 	if len(u) == 0 {
 		return fmt.Errorf("Username cannot be blank")
 	}
-
+	fmt.Println(string(args))
+	fmt.Println("im u ", string(u))
 	c.username = string(u)
 
 	c.Register <- c
@@ -156,19 +166,6 @@ func (c *Client) sendFile(args []byte) error {
 
 	args = bytes.TrimSpace(bytes.TrimPrefix(args, recipient))
 
-	// l := bytes.Split(args, DELIMITER)[0]
-	// fmt.Print(string(args))
-	// length, err := strconv.Atoi(string(l))
-	// if err != nil {
-	// 	return fmt.Errorf("body length must be present")
-	// }
-	// if length == 0 {
-	// 	return fmt.Errorf("body length must be at least 1")
-	// }
-
-	//padding := len(l) + len(DELIMITER) // Size of the body length + the delimiter
-	//	body := args[padding : padding+length]
-
 	c.Outbound <- Command{
 		channel: string(recipient),
 		sender:  c.username,
@@ -187,8 +184,5 @@ func (c *Client) listChannels() {
 }
 
 func (c *Client) isNamed() bool {
-	if len(c.username) == 0 {
-		return false
-	}
-	return true
+	return !(len(c.username) == 0)
 }
