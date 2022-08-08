@@ -3,6 +3,7 @@ package models
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"io"
 	"net"
@@ -34,7 +35,6 @@ func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Clie
 }
 
 func (c *Client) Read() error {
-	// reader := bufio.NewReader(c.Conn)
 	for {
 		msg := make([]byte, 3)
 		_, err := c.Conn.Read(msg)
@@ -67,9 +67,9 @@ func (c *Client) Handle(message []byte) {
 			c.err(err)
 		}
 	case "SUS":
-		// if err := c.suscribeToChannel(); err != nil {
-		// 	c.err(err)
-		// }
+		if err := c.suscribeToChannel(); err != nil {
+			c.err(err)
+		}
 	case "UNS":
 		// if err := c.unsuscribeFromChannel(); err != nil {
 		// 	c.err(err)
@@ -86,22 +86,23 @@ func (c *Client) Handle(message []byte) {
 }
 
 func (c *Client) registerClient() error {
-	args := make([]byte, 7)
+	args := make([]byte, 11)
+
 	_, err := c.Conn.Read(args)
+
 	if err != nil {
-		return fmt.Errorf("Error en recibir datos")
+		return fmt.Errorf("error en recibir datos")
 	}
 
-	u := bytes.TrimSpace(args)
-	if u[0] != '@' {
-		return fmt.Errorf("Username must begin with @")
+	clientName := bytes.TrimSpace(args)
+
+	if clientName[0] != '@' {
+		return fmt.Errorf("username must begin with @")
 	}
-	if len(u) == 0 {
-		return fmt.Errorf("Username cannot be blank")
+	if len(clientName[1:]) == 0 {
+		return fmt.Errorf("username cannot be blank")
 	}
-	fmt.Println(string(args))
-	fmt.Println("im u ", string(u))
-	c.username = string(u)
+	c.username = strings.Trim(string(clientName), ":")
 
 	c.Register <- c
 
@@ -112,20 +113,31 @@ func (c *Client) err(e error) {
 	c.Conn.Write([]byte("ERR " + e.Error() + "\n"))
 }
 
-func (c *Client) suscribeToChannel(args []byte) error {
+func (c *Client) suscribeToChannel() error {
 	isRegistered := c.isNamed()
 
 	if !isRegistered {
 		return fmt.Errorf("Client is no registered, use REGISTER command for sign up")
 	}
 
+	args := make([]byte, 11)
+
+	_, err := c.Conn.Read(args)
+
+	if err != nil {
+		return fmt.Errorf("error en recibir datos")
+	}
+
 	channelID := bytes.TrimSpace(args)
+
 	if channelID[0] != '#' {
 		return fmt.Errorf("ERR Channel ID must begin with #")
 	}
 
+	channelName := strings.Trim(string(channelID), ":")
+
 	c.Outbound <- Command{
-		channel: string(channelID),
+		channel: channelName,
 		sender:  c.username,
 		id:      SUSCRIBE,
 	}
