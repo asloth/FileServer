@@ -38,7 +38,7 @@ func (c *Client) Read() error {
 	for {
 		msg := make([]byte, 3)
 		_, err := c.Conn.Read(msg)
-		fmt.Println(msg)
+
 		if err == io.EOF {
 			// Connection closed, deregister client
 			c.Deregister <- c
@@ -81,7 +81,7 @@ func (c *Client) Handle(message []byte) {
 	case "LCH":
 		c.listChannels()
 	default:
-		c.err(fmt.Errorf("Unknown command %s", cmd))
+		c.err(fmt.Errorf("unknown command %s", cmd))
 	}
 }
 
