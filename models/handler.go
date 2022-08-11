@@ -2,17 +2,17 @@ package models
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
-//The hub is going to coordinate channels and petitions from the clients
+// The hub is going to coordinate channels and petitions from the clients
 type Hub struct {
 	Channels        map[string]*Channel // The list of channels
 	Clients         map[string]*Client  // The list of clients registrate in the server
 	Commands        chan Command        // The list of commands
 	Deregistrations chan *Client        // The channel for deregistrations from channels
 	Registrations   chan *Client        // The channel for registrations in the channels
-	data            chan []byte         //data from the connection
 }
 
 func NewHub() *Hub {
@@ -39,7 +39,7 @@ func (h *Hub) Run() {
 			case UNSUSCRIBE:
 				h.leaveChannel(cmd.sender, cmd.channel)
 			case SEND:
-				h.sendFile(cmd.sender, cmd.channel)
+				h.sendFile(cmd.sender, cmd.channel, cmd.metadata, cmd.body)
 			case LCHANNELS:
 				h.listChannels(cmd.sender)
 			default:
@@ -92,8 +92,10 @@ func (h *Hub) leaveChannel(userName string, channelName string) {
 	}
 }
 
-func (h *Hub) sendFile(user string, channel string) {
-	if sender, ok := h.Clients[user]; ok {
+func (h *Hub) sendFile(name string, channel string, meta map[string][]byte, c chan []byte) {
+	fmt.Println("lllegue a send file ")
+
+	if sender, ok := h.Clients[name]; ok {
 		if channel[0] == '#' {
 			fmt.Println("flag1")
 			if channel, ok := h.Channels[channel]; ok {
@@ -101,16 +103,24 @@ func (h *Hub) sendFile(user string, channel string) {
 				if _, ok := channel.clients[sender]; ok {
 					fmt.Println("flag3")
 					channel.setReceivingMode(sender.username)
-
 					fmt.Println("flag4")
-					sender.isTransfering = true
-
-					fmt.Println("flag6")
-					sender.Conn.Write([]byte("SENDING\n"))
-
-					// channel.broadcastFile(sender.username, sender.Conn)
-
-					fmt.Println("flag7")
+					fileSize, _ := strconv.ParseInt(strings.Trim(string(meta["fileSize"]), ":"), 10, 64)
+					fileName := strings.Trim(string(meta["fileName"]), ":")
+					fmt.Println("im fileSize", fileSize)
+					fmt.Println("im filename", fileName)
+					var receivedBytes int64
+					const BUFFERSIZE = 1024
+					for {
+						if (fileSize - receivedBytes) < BUFFERSIZE {
+							prime := make([]byte, (fileSize - receivedBytes))
+							prime = <-c
+							fmt.Println("im prime", string(prime))
+							break
+						}
+						prime := <-c
+						fmt.Println("im prime", prime)
+						receivedBytes += BUFFERSIZE
+					}
 
 				} else {
 					sender.Conn.Write([]byte("ERR client doesn't allowed\n"))
@@ -144,7 +154,7 @@ func (h *Hub) listChannels(u string) {
 	}
 }
 
-//for create new channels
+// for create new channels
 func newChannel(c string) (chn *Channel) {
 
 	return &Channel{

@@ -13,8 +13,9 @@ const (
 
 // A class command is defined and its params as class attributes
 type Command struct {
-	id      ID     // The command
-	sender  string // The id of the sender that is sending the file
-	channel string // The name of the channel to send the file to
-	body    []byte // The file
+	id       ID                // The command
+	sender   string            // The id of the sender that is sending the file
+	channel  string            // The name of the channel to send the file to
+	metadata map[string][]byte //Data about the body
+	body     chan []byte       // The file in bytes
 }

@@ -3,6 +3,7 @@ package models
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"io"
@@ -14,23 +15,21 @@ var (
 )
 
 type Client struct {
-	Conn          net.Conn       //The TCP connect
-	Outbound      chan<- Command //This channel receive the commands
-	Register      chan<- *Client //This channel receive the client that want to join a channel
-	Deregister    chan<- *Client //This channel receive the client that want to leave a channel
-	macaddr       []string       //Mac address for identify the client
-	username      string         // The name of the client
-	isTransfering bool
-	isReceiving   bool
+	Conn        net.Conn       //The TCP connect
+	Outbound    chan<- Command //This channel receive the commands
+	Register    chan<- *Client //This channel receive the client that want to join a channel
+	Deregister  chan<- *Client //This channel receive the client that want to leave a channel
+	macaddr     []string       //Mac address for identify the client
+	username    string         // The name of the client
+	isReceiving bool
 }
 
 func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Client) *Client {
 	return &Client{
-		Conn:          conn,
-		Outbound:      o,
-		Register:      r,
-		Deregister:    d,
-		isTransfering: false,
+		Conn:       conn,
+		Outbound:   o,
+		Register:   r,
+		Deregister: d,
 	}
 }
 
@@ -75,9 +74,9 @@ func (c *Client) Handle(message []byte) {
 		// 	c.err(err)
 		// }
 	case "SND":
-		// if err := c.sendFile(); err != nil {
-		// 	c.err(err)
-		// }
+		if err := c.sendFile(); err != nil {
+			c.err(err)
+		}
 	case "LCH":
 		c.listChannels()
 	default:
@@ -125,7 +124,7 @@ func (c *Client) suscribeToChannel() error {
 	_, err := c.Conn.Read(args)
 
 	if err != nil {
-		return fmt.Errorf("error en recibir datos")
+		return fmt.Errorf("ERR fail reading the data")
 	}
 
 	channelID := bytes.TrimSpace(args)
@@ -158,11 +157,17 @@ func (c *Client) unsuscribeFromChannel(args []byte) error {
 	return nil
 }
 
-func (c *Client) sendFile(args []byte) error {
+func (c *Client) sendFile() error {
 	isRegistered := c.isNamed()
 
 	if !isRegistered {
 		return fmt.Errorf("Client is no registered, use REGISTER command for sign up")
+	}
+
+	args := make([]byte, 11)
+
+	if _, err := c.Conn.Read(args); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
 	}
 
 	args = bytes.TrimSpace(args)
@@ -171,19 +176,58 @@ func (c *Client) sendFile(args []byte) error {
 		return fmt.Errorf("recipient must be a channel ('#name')")
 	}
 
-	recipient := bytes.Split(args, []byte(" "))[0]
-	if len(recipient) == 0 {
+	recipient := strings.Trim(string(args), ":")
+
+	if len(recipient[1:]) == 0 {
 		return fmt.Errorf("channel must have a name")
 	}
 
-	args = bytes.TrimSpace(bytes.TrimPrefix(args, recipient))
+	metad := make(map[string][]byte)
+	bufferFileSize := make([]byte, 10)
+
+	if _, err := c.Conn.Read(bufferFileSize); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
+
+	bufferFileName := make([]byte, 64)
+
+	if _, err := c.Conn.Read(bufferFileName); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
+
+	datachn := make(chan []byte, 1024)
+
+	metad["fileSize"] = bufferFileSize
+	metad["fileName"] = bufferFileName
 
 	c.Outbound <- Command{
-		channel: string(recipient),
-		sender:  c.username,
-		body:    args,
-		id:      SEND,
+		channel:  string(recipient),
+		sender:   c.username,
+		metadata: metad,
+		body:     datachn,
+		id:       SEND,
 	}
+
+	const BUFFERSIZE = 1024
+	fileSize, _ := strconv.ParseInt(strings.Trim(string(bufferFileSize), ":"), 10, 64)
+	var receivedBytes int64
+
+	for {
+		if (fileSize - receivedBytes) < BUFFERSIZE {
+			data := make([]byte, (fileSize - receivedBytes))
+			c.Conn.Read(data)
+			datachn <- data
+			c.Conn.Read(make([]byte, (receivedBytes+BUFFERSIZE)-fileSize))
+			break
+		}
+		// io.CopyN(newFile, connection, BUFFERSIZE)
+		data := make([]byte, BUFFERSIZE)
+		c.Conn.Read(data)
+		datachn <- data
+		receivedBytes += BUFFERSIZE
+	}
+
+	fmt.Println("llegue al final de la func", string(bufferFileName))
 
 	return nil
 }

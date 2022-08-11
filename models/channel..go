@@ -67,7 +67,7 @@ func (c *Channel) setReceivingMode(s string) {
 		connection := cl.Conn
 		if cl.username != s {
 			cl.isReceiving = true
-			connection.Write([]byte("RECEIVING\n"))
+			connection.Write([]byte("REC"))
 		}
 	}
 }
