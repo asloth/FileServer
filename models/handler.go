@@ -80,7 +80,7 @@ func (h *Hub) joinChannel(userName string, channelName string) {
 			ch.clients[client] = true
 			h.Channels[channelName] = ch
 		}
-		client.Conn.Write([]byte("OK\n"))
+		client.Conn.Write([]byte("OK"))
 	}
 }
 
@@ -105,20 +105,23 @@ func (h *Hub) sendFile(name string, channel string, meta map[string][]byte, c ch
 					channel.setReceivingMode(sender.username)
 					fmt.Println("flag4")
 					fileSize, _ := strconv.ParseInt(strings.Trim(string(meta["fileSize"]), ":"), 10, 64)
+					channel.broadcast(meta["fileSize"])
 					fileName := strings.Trim(string(meta["fileName"]), ":")
+					channel.broadcast(meta["fileName"])
 					fmt.Println("im fileSize", fileSize)
 					fmt.Println("im filename", fileName)
 					var receivedBytes int64
 					const BUFFERSIZE = 1024
 					for {
 						if (fileSize - receivedBytes) < BUFFERSIZE {
-							prime := make([]byte, (fileSize - receivedBytes))
-							prime = <-c
-							fmt.Println("im prime", string(prime))
+							fileData := <-c
+							channel.broadcast(fileData)
+							fmt.Println("im the last fileData", string(fileData))
 							break
 						}
-						prime := <-c
-						fmt.Println("im prime", prime)
+						fileData := <-c
+						channel.broadcast(fileData)
+						fmt.Println("im fileData", fileData)
 						receivedBytes += BUFFERSIZE
 					}
 

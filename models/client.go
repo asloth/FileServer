@@ -19,7 +19,6 @@ type Client struct {
 	Outbound    chan<- Command //This channel receive the commands
 	Register    chan<- *Client //This channel receive the client that want to join a channel
 	Deregister  chan<- *Client //This channel receive the client that want to leave a channel
-	macaddr     []string       //Mac address for identify the client
 	username    string         // The name of the client
 	isReceiving bool
 }
