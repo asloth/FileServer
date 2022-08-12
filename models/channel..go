@@ -2,7 +2,6 @@ package models
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -15,7 +14,6 @@ func (c *Channel) broadcast(body []byte) {
 	for cl := range c.clients {
 		connection := cl.Conn
 		if cl.isReceiving {
-			fmt.Println("broadcastmethod")
 			connection.Write(body)
 		}
 	}

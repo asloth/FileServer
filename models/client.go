@@ -55,9 +55,6 @@ func (c *Client) Handle(message []byte) {
 	//Taking the command from the received message
 	cmd := bytes.ToUpper(bytes.TrimSpace(message))
 
-	//Take the arguments of the command
-	// args := bytes.TrimSpace(bytes.TrimPrefix(message, cmd))
-
 	//Identifying the command
 	switch string(cmd) {
 	case "REG":
@@ -219,14 +216,11 @@ func (c *Client) sendFile() error {
 			c.Conn.Read(make([]byte, (receivedBytes+BUFFERSIZE)-fileSize))
 			break
 		}
-		// io.CopyN(newFile, connection, BUFFERSIZE)
 		data := make([]byte, BUFFERSIZE)
 		c.Conn.Read(data)
 		datachn <- data
 		receivedBytes += BUFFERSIZE
 	}
-
-	fmt.Println("llegue al final de la func", string(bufferFileName))
 
 	return nil
 }

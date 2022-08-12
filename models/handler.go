@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -93,35 +92,25 @@ func (h *Hub) leaveChannel(userName string, channelName string) {
 }
 
 func (h *Hub) sendFile(name string, channel string, meta map[string][]byte, c chan []byte) {
-	fmt.Println("lllegue a send file ")
 
 	if sender, ok := h.Clients[name]; ok {
 		if channel[0] == '#' {
-			fmt.Println("flag1")
 			if channel, ok := h.Channels[channel]; ok {
-				fmt.Println("flag2")
 				if _, ok := channel.clients[sender]; ok {
-					fmt.Println("flag3")
 					channel.setReceivingMode(sender.username)
-					fmt.Println("flag4")
 					fileSize, _ := strconv.ParseInt(strings.Trim(string(meta["fileSize"]), ":"), 10, 64)
 					channel.broadcast(meta["fileSize"])
-					fileName := strings.Trim(string(meta["fileName"]), ":")
 					channel.broadcast(meta["fileName"])
-					fmt.Println("im fileSize", fileSize)
-					fmt.Println("im filename", fileName)
 					var receivedBytes int64
 					const BUFFERSIZE = 1024
 					for {
 						if (fileSize - receivedBytes) < BUFFERSIZE {
 							fileData := <-c
 							channel.broadcast(fileData)
-							fmt.Println("im the last fileData", string(fileData))
 							break
 						}
 						fileData := <-c
 						channel.broadcast(fileData)
-						fmt.Println("im fileData", fileData)
 						receivedBytes += BUFFERSIZE
 					}
 
@@ -144,7 +133,7 @@ func (h *Hub) listChannels(u string) {
 		var names []string
 
 		if len(h.Channels) == 0 {
-			client.Conn.Write([]byte("ERR no channels found\n"))
+			client.Conn.Write([]byte("ERR no channels found"))
 		}
 
 		for c := range h.Channels {
