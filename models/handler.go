@@ -1,8 +1,11 @@
 package models
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
-//The hub is going to coordinate channels and petitions from the clients
+// The hub is going to coordinate channels and petitions from the clients
 type Hub struct {
 	Channels        map[string]*Channel // The list of channels
 	Clients         map[string]*Client  // The list of clients registrate in the server
@@ -35,7 +38,7 @@ func (h *Hub) Run() {
 			case UNSUSCRIBE:
 				h.leaveChannel(cmd.sender, cmd.channel)
 			case SEND:
-				h.sendFile(cmd.sender, cmd.channel, cmd.body)
+				h.sendFile(cmd.sender, cmd.channel, cmd.metadata, cmd.body)
 			case LCHANNELS:
 				h.listChannels(cmd.sender)
 			default:
@@ -76,7 +79,7 @@ func (h *Hub) joinChannel(userName string, channelName string) {
 			ch.clients[client] = true
 			h.Channels[channelName] = ch
 		}
-		client.Conn.Write([]byte("OK\n"))
+		client.Conn.Write([]byte("OK"))
 	}
 }
 
@@ -88,20 +91,40 @@ func (h *Hub) leaveChannel(userName string, channelName string) {
 	}
 }
 
-func (h *Hub) sendFile(user string, channel string, body []byte) {
-	if sender, ok := h.Clients[user]; ok {
-		switch channel[0] {
-		case '#':
+func (h *Hub) sendFile(name string, channel string, meta map[string][]byte, c chan []byte) {
+
+	if sender, ok := h.Clients[name]; ok {
+		if channel[0] == '#' {
 			if channel, ok := h.Channels[channel]; ok {
 				if _, ok := channel.clients[sender]; ok {
-					channel.broadcast(sender.username, body)
+					channel.setReceivingMode(sender.username)
+					fileSize, _ := strconv.ParseInt(strings.Trim(string(meta["fileSize"]), ":"), 10, 64)
+					channel.broadcast(meta["fileSize"])
+					channel.broadcast(meta["fileName"])
+					var receivedBytes int64
+					const BUFFERSIZE = 1024
+					for {
+						if (fileSize - receivedBytes) < BUFFERSIZE {
+							fileData := <-c
+							channel.broadcast(fileData)
+							break
+						}
+						fileData := <-c
+						channel.broadcast(fileData)
+						receivedBytes += BUFFERSIZE
+					}
+
+				} else {
+					sender.Conn.Write([]byte("ERR client doesn't allowed\n"))
+
 				}
 			} else {
-				sender.Conn.Write([]byte("ERR no such channel"))
+				sender.Conn.Write([]byte("ERR no such channel\n"))
 			}
-		default:
-			sender.Conn.Write([]byte("ERR MSG command"))
+		} else {
+			sender.Conn.Write([]byte("ERR MSG command\n"))
 		}
+
 	}
 }
 
@@ -110,7 +133,7 @@ func (h *Hub) listChannels(u string) {
 		var names []string
 
 		if len(h.Channels) == 0 {
-			client.Conn.Write([]byte("ERR no channels found\n"))
+			client.Conn.Write([]byte("ERR no channels found"))
 		}
 
 		for c := range h.Channels {
@@ -123,7 +146,7 @@ func (h *Hub) listChannels(u string) {
 	}
 }
 
-//for create new channels
+// for create new channels
 func newChannel(c string) (chn *Channel) {
 
 	return &Channel{

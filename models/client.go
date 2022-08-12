@@ -1,9 +1,10 @@
 package models
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"io"
 	"net"
@@ -14,12 +15,12 @@ var (
 )
 
 type Client struct {
-	Conn       net.Conn       //The TCP connect
-	Outbound   chan<- Command //This channel receive the commands
-	Register   chan<- *Client //This channel receive the client that want to join a channel
-	Deregister chan<- *Client //This channel receive the client that want to leave a channel
-	macaddr    []string       //Mac address for identify the client
-	username   string         // The name of the client
+	Conn        net.Conn       //The TCP connect
+	Outbound    chan<- Command //This channel receive the commands
+	Register    chan<- *Client //This channel receive the client that want to join a channel
+	Deregister  chan<- *Client //This channel receive the client that want to leave a channel
+	username    string         // The name of the client
+	isReceiving bool
 }
 
 func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Client) *Client {
@@ -33,65 +34,70 @@ func NewClient(conn net.Conn, o chan<- Command, r chan<- *Client, d chan<- *Clie
 
 func (c *Client) Read() error {
 	for {
-		msg, err := bufio.NewReader(c.Conn).ReadBytes('\n')
+		msg := make([]byte, 3)
+		_, err := c.Conn.Read(msg)
+
 		if err == io.EOF {
 			// Connection closed, deregister client
 			c.Deregister <- c
 			return nil
 		}
-
 		if err != nil {
 			return err
 		}
 
 		c.Handle(msg)
 	}
+
 }
 
 func (c *Client) Handle(message []byte) {
 	//Taking the command from the received message
-	cmd := bytes.ToUpper(bytes.TrimSpace(bytes.Split(message, []byte(" "))[0]))
-
-	//Take the arguments of the command
-	args := bytes.TrimSpace(bytes.TrimPrefix(message, cmd))
+	cmd := bytes.ToUpper(bytes.TrimSpace(message))
 
 	//Identifying the command
 	switch string(cmd) {
-	case "REGISTER":
-		if err := c.registerClient(args); err != nil {
+	case "REG":
+		if err := c.registerClient(); err != nil {
 			c.err(err)
 		}
-	case "SUSCRIBE":
-		if err := c.suscribeToChannel(args); err != nil {
+	case "SUS":
+		if err := c.suscribeToChannel(); err != nil {
 			c.err(err)
 		}
-	case "UNSUSCRIBE":
-		if err := c.unsuscribeFromChannel(args); err != nil {
+	case "UNS":
+		// if err := c.unsuscribeFromChannel(); err != nil {
+		// 	c.err(err)
+		// }
+	case "SND":
+		if err := c.sendFile(); err != nil {
 			c.err(err)
 		}
-	case "SEND":
-		if err := c.sendFile(args); err != nil {
-			c.err(err)
-		}
-	case "LCHANNELS":
+	case "LCH":
 		c.listChannels()
 	default:
-		c.err(fmt.Errorf("Unknown command %s", cmd))
+		c.err(fmt.Errorf("unknown command %s", cmd))
 	}
 }
 
-func (c *Client) registerClient(args []byte) error {
-	u := bytes.TrimSpace(args)
-	if u[0] != '@' {
-		fmt.Print(args)
-		fmt.Print(u[0])
-		return fmt.Errorf("Username must begin with @")
-	}
-	if len(u) == 0 {
-		return fmt.Errorf("Username cannot be blank")
+func (c *Client) registerClient() error {
+	args := make([]byte, 11)
+
+	_, err := c.Conn.Read(args)
+
+	if err != nil {
+		return fmt.Errorf("error en recibir datos")
 	}
 
-	c.username = string(u)
+	clientName := bytes.TrimSpace(args)
+
+	if clientName[0] != '@' {
+		return fmt.Errorf("username must begin with @")
+	}
+	if len(clientName[1:]) == 0 {
+		return fmt.Errorf("username cannot be blank")
+	}
+	c.username = strings.Trim(string(clientName), ":")
 
 	c.Register <- c
 
@@ -102,20 +108,31 @@ func (c *Client) err(e error) {
 	c.Conn.Write([]byte("ERR " + e.Error() + "\n"))
 }
 
-func (c *Client) suscribeToChannel(args []byte) error {
+func (c *Client) suscribeToChannel() error {
 	isRegistered := c.isNamed()
 
 	if !isRegistered {
 		return fmt.Errorf("Client is no registered, use REGISTER command for sign up")
 	}
 
+	args := make([]byte, 11)
+
+	_, err := c.Conn.Read(args)
+
+	if err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
+
 	channelID := bytes.TrimSpace(args)
+
 	if channelID[0] != '#' {
 		return fmt.Errorf("ERR Channel ID must begin with #")
 	}
 
+	channelName := strings.Trim(string(channelID), ":")
+
 	c.Outbound <- Command{
-		channel: string(channelID),
+		channel: channelName,
 		sender:  c.username,
 		id:      SUSCRIBE,
 	}
@@ -136,11 +153,17 @@ func (c *Client) unsuscribeFromChannel(args []byte) error {
 	return nil
 }
 
-func (c *Client) sendFile(args []byte) error {
+func (c *Client) sendFile() error {
 	isRegistered := c.isNamed()
 
 	if !isRegistered {
 		return fmt.Errorf("Client is no registered, use REGISTER command for sign up")
+	}
+
+	args := make([]byte, 11)
+
+	if _, err := c.Conn.Read(args); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
 	}
 
 	args = bytes.TrimSpace(args)
@@ -149,31 +172,54 @@ func (c *Client) sendFile(args []byte) error {
 		return fmt.Errorf("recipient must be a channel ('#name')")
 	}
 
-	recipient := bytes.Split(args, []byte(" "))[0]
-	if len(recipient) == 0 {
+	recipient := strings.Trim(string(args), ":")
+
+	if len(recipient[1:]) == 0 {
 		return fmt.Errorf("channel must have a name")
 	}
 
-	args = bytes.TrimSpace(bytes.TrimPrefix(args, recipient))
+	metad := make(map[string][]byte)
+	bufferFileSize := make([]byte, 10)
 
-	// l := bytes.Split(args, DELIMITER)[0]
-	// fmt.Print(string(args))
-	// length, err := strconv.Atoi(string(l))
-	// if err != nil {
-	// 	return fmt.Errorf("body length must be present")
-	// }
-	// if length == 0 {
-	// 	return fmt.Errorf("body length must be at least 1")
-	// }
+	if _, err := c.Conn.Read(bufferFileSize); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
 
-	//padding := len(l) + len(DELIMITER) // Size of the body length + the delimiter
-	//	body := args[padding : padding+length]
+	bufferFileName := make([]byte, 64)
+
+	if _, err := c.Conn.Read(bufferFileName); err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
+
+	datachn := make(chan []byte, 1024)
+
+	metad["fileSize"] = bufferFileSize
+	metad["fileName"] = bufferFileName
 
 	c.Outbound <- Command{
-		channel: string(recipient),
-		sender:  c.username,
-		body:    args,
-		id:      SEND,
+		channel:  string(recipient),
+		sender:   c.username,
+		metadata: metad,
+		body:     datachn,
+		id:       SEND,
+	}
+
+	const BUFFERSIZE = 1024
+	fileSize, _ := strconv.ParseInt(strings.Trim(string(bufferFileSize), ":"), 10, 64)
+	var receivedBytes int64
+
+	for {
+		if (fileSize - receivedBytes) < BUFFERSIZE {
+			data := make([]byte, (fileSize - receivedBytes))
+			c.Conn.Read(data)
+			datachn <- data
+			c.Conn.Read(make([]byte, (receivedBytes+BUFFERSIZE)-fileSize))
+			break
+		}
+		data := make([]byte, BUFFERSIZE)
+		c.Conn.Read(data)
+		datachn <- data
+		receivedBytes += BUFFERSIZE
 	}
 
 	return nil
@@ -187,8 +233,5 @@ func (c *Client) listChannels() {
 }
 
 func (c *Client) isNamed() bool {
-	if len(c.username) == 0 {
-		return false
-	}
-	return true
+	return !(len(c.username) == 0)
 }
