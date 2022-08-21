@@ -15,7 +15,7 @@ var (
 )
 
 type Client struct {
-	Conn        net.Conn       //The TCP connect
+	Conn        net.Conn       //The TCP connection
 	Outbound    chan<- Command //This channel receive the commands
 	Register    chan<- *Client //This channel receive the client that want to join a channel
 	Deregister  chan<- *Client //This channel receive the client that want to leave a channel
@@ -66,9 +66,9 @@ func (c *Client) Handle(message []byte) {
 			c.err(err)
 		}
 	case "UNS":
-		// if err := c.unsuscribeFromChannel(); err != nil {
-		// 	c.err(err)
-		// }
+		if err := c.unsuscribeFromChannel(); err != nil {
+			c.err(err)
+		}
 	case "SND":
 		if err := c.sendFile(); err != nil {
 			c.err(err)
@@ -86,7 +86,7 @@ func (c *Client) registerClient() error {
 	_, err := c.Conn.Read(args)
 
 	if err != nil {
-		return fmt.Errorf("error en recibir datos")
+		return fmt.Errorf("ERR fail reading the data")
 	}
 
 	clientName := bytes.TrimSpace(args)
@@ -139,14 +139,24 @@ func (c *Client) suscribeToChannel() error {
 	return nil
 }
 
-func (c *Client) unsuscribeFromChannel(args []byte) error {
+func (c *Client) unsuscribeFromChannel() error {
+	args := make([]byte, 11)
+
+	_, err := c.Conn.Read(args)
+
+	if err != nil {
+		return fmt.Errorf("ERR fail reading the data")
+	}
+
 	channelID := bytes.TrimSpace(args)
-	if channelID[0] == '#' {
+	if channelID[0] != '#' {
 		return fmt.Errorf("ERR channelID must start with '#'")
 	}
 
+	channelName := strings.Trim(string(channelID), ":")
+
 	c.Outbound <- Command{
-		channel: string(channelID),
+		channel: channelName,
 		sender:  c.username,
 		id:      UNSUSCRIBE,
 	}
@@ -157,7 +167,7 @@ func (c *Client) sendFile() error {
 	isRegistered := c.isNamed()
 
 	if !isRegistered {
-		return fmt.Errorf("Client is no registered, use REGISTER command for sign up")
+		return fmt.Errorf("Client is no registered")
 	}
 
 	args := make([]byte, 11)

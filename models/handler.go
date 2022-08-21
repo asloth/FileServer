@@ -42,7 +42,7 @@ func (h *Hub) Run() {
 			case LCHANNELS:
 				h.listChannels(cmd.sender)
 			default:
-				// Freak out?
+				// Freak out
 			}
 		}
 	}
@@ -87,7 +87,12 @@ func (h *Hub) leaveChannel(userName string, channelName string) {
 	if client, ok := h.Clients[userName]; ok {
 		if channel, ok := h.Channels[channelName]; ok {
 			delete(channel.clients, client)
+			client.Conn.Write([]byte("OK"))
+		} else {
+			client.Conn.Write([]byte("ERR channel invalid"))
 		}
+	} else {
+		client.Conn.Write([]byte("ERR username invalid"))
 	}
 }
 
@@ -113,9 +118,10 @@ func (h *Hub) sendFile(name string, channel string, meta map[string][]byte, c ch
 						channel.broadcast(fileData)
 						receivedBytes += BUFFERSIZE
 					}
+					sender.Conn.Write([]byte("File sended!"))
 
 				} else {
-					sender.Conn.Write([]byte("ERR client doesn't allowed\n"))
+					sender.Conn.Write([]byte("ERR don't allowed\n"))
 
 				}
 			} else {
