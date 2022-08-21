@@ -26,12 +26,7 @@ func main() {
 		//Verify errors
 		if err != nil {
 			log.Printf("%v", err)
-		}
-
-		//Obtaining the mac address of the client for identify it
-
-		if err != nil {
-			log.Printf("%v", err)
+			continue
 		}
 
 		//Creating a new client
